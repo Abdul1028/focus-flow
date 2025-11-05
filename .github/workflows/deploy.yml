@@ -1,4 +1,55 @@
-name: Pushly Auto Deploy (Production)
+# name: Pushly Auto Deploy (Production)
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+# jobs:
+#   deploy-production:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout repo
+#         uses: actions/checkout@v4
+
+#       - name: Trigger Deployment Creation
+#         id: create_deployment
+#         run: |
+#           echo "🚀 Creating deployment record on Pushly..."
+#           RESPONSE=$(curl -s -X POST "https://api.wareality.tech/api/projects/${{ secrets.PROJECT_ID }}/deployments" \
+#             -H "Content-Type: application/json" \
+#             -H "Authorization: Bearer ${{ secrets.PUSHLY_TOKEN }}" \
+#             -d "{
+#               \"gitCommitHash\": \"${{ github.sha }}\",
+#               \"gitBranch\": \"main\",
+#               \"environment\": \"PRODUCTION\"
+#             }")
+          
+#           echo "Response: $RESPONSE"
+#           DEPLOYMENT_ID=$(echo $RESPONSE | jq -r '.id')
+          
+#           if [ "$DEPLOYMENT_ID" = "null" ] || [ -z "$DEPLOYMENT_ID" ]; then
+#             echo "❌ Failed to create deployment"
+#             exit 1
+#           fi
+
+#           echo "✅ Deployment created with ID: $DEPLOYMENT_ID"
+#           echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_ENV
+
+#       - name: Trigger Actual Deployment
+#         run: |
+#           echo "🚀 Starting deployment to PRODUCTION environment..."
+#           curl -s -X POST "https://api.wareality.tech/api/projects/${{ secrets.PROJECT_ID }}/deployments/${{ env.deployment_id }}/deploy?environment=PRODUCTION" \
+#             -H "Authorization: Bearer ${{ secrets.PUSHLY_TOKEN }}"
+
+#           echo "✅ Deployment triggered to PRODUCTION!"
+
+#       - name: Done
+#         run: echo "🎉 Pushly Deployment to PRODUCTION initiated successfully!"
+
+
+name: Pushly Auto Deploy (PRODUCTION)
 
 on:
   push:
@@ -8,10 +59,11 @@ on:
 jobs:
   deploy-production:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Trigger Deployment Creation
         id: create_deployment
@@ -33,7 +85,6 @@ jobs:
             echo "❌ Failed to create deployment"
             exit 1
           fi
-
           echo "✅ Deployment created with ID: $DEPLOYMENT_ID"
           echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_ENV
 
@@ -42,8 +93,97 @@ jobs:
           echo "🚀 Starting deployment to PRODUCTION environment..."
           curl -s -X POST "https://api.wareality.tech/api/projects/${{ secrets.PROJECT_ID }}/deployments/${{ env.deployment_id }}/deploy?environment=PRODUCTION" \
             -H "Authorization: Bearer ${{ secrets.PUSHLY_TOKEN }}"
-
           echo "✅ Deployment triggered to PRODUCTION!"
+      - name: Send Slack Notification
+        if: always()
+        run: |
+          DEPLOYMENT_STATUS="${{ job.status }}"
+          COMMIT_MSG=$(git log -1 --pretty=%B | head -c 200)
+          COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          PROJECT_ID="${{ secrets.PROJECT_ID }}"
+          DEPLOYMENT_ID="${{ env.deployment_id }}"
+          
+          if [ "$DEPLOYMENT_STATUS" = "success" ]; then
+            STATUS_EMOJI="✅"
+            STATUS_TEXT="Success"
+            DEPLOYMENT_URL="https://focus-flow.wareality.tech"
+            DEPLOYMENT_SECTION=",
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \"*Deployment URL:* <$DEPLOYMENT_URL|$DEPLOYMENT_URL>\"
+                  }
+                }"
+          else
+            STATUS_EMOJI="❌"
+            STATUS_TEXT="Failed"
+            DEPLOYMENT_SECTION=""
+          fi
+          
+          curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"blocks\": [
+                {
+                  \"type\": \"header\",
+                  \"text\": {
+                    \"type\": \"plain_text\",
+                    \"text\": \"$STATUS_EMOJI Deployment $STATUS_TEXT\",
+                    \"emoji\": true
+                  }
+                },
+                {
+                  \"type\": \"section\",
+                  \"fields\": [
+                    {
+                      \"type\": \"mrkdwn\",
+                      \"text\": \"*Project:*\n$PROJECT_ID\"
+                    },
+                    {
+                      \"type\": \"mrkdwn\",
+                      \"text\": \"*Environment:*\nPRODUCTION\"
+                    },
+                    {
+                      \"type\": \"mrkdwn\",
+                      \"text\": \"*Branch:*\nmain\"
+                    },
+                    {
+                      \"type\": \"mrkdwn\",
+                      \"text\": \"*Status:*\n$STATUS_TEXT\"
+                    },
+                    {
+                      \"type\": \"mrkdwn\",
+                      \"text\": \"*Deployment ID:*\n$DEPLOYMENT_ID\"
+                    },
+                    {
+                      \"type\": \"mrkdwn\",
+                      \"text\": \"*Commit Hash:*\n`${{ github.sha }}`\"
+                    },
+                    {
+                      \"type\": \"mrkdwn\",
+                      \"text\": \"*Commit Message:*\n$COMMIT_MSG\"
+                    },
+                    {
+                      \"type\": \"mrkdwn\",
+                      \"text\": \"*Repository:*\n${{ github.repository }}\"
+                    }
+                  ]
+                }$DEPLOYMENT_SECTION,
+                {
+                  \"type\": \"divider\"
+                },
+                {
+                  \"type\": \"context\",
+                  \"elements\": [
+                    {
+                      \"type\": \"mrkdwn\",
+                      \"text\": \"Build triggered on ${{ github.ref }} | Commit: `$COMMIT_SHORT`\"
+                    }
+                  ]
+                }
+              ]
+            }"
 
       - name: Done
         run: echo "🎉 Pushly Deployment to PRODUCTION initiated successfully!"
