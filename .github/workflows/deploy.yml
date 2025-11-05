@@ -76,10 +76,10 @@ jobs:
               \"gitBranch\": \"main\",
               \"environment\": \"PRODUCTION\"
             }")
-          
+
           echo "Response: $RESPONSE"
-          DEPLOYMENT_ID=$(echo $RESPONSE | jq -r '.id')
-          
+          DEPLOYMENT_ID=$(echo "$RESPONSE" | jq -r '.id')
+
           if [ "$DEPLOYMENT_ID" = "null" ] || [ -z "$DEPLOYMENT_ID" ]; then
             echo "❌ Failed to create deployment"
             exit 1
@@ -93,6 +93,7 @@ jobs:
           curl -s -X POST "https://api.wareality.tech/api/projects/${{ secrets.PROJECT_ID }}/deployments/${{ env.deployment_id }}/deploy?environment=PRODUCTION" \
             -H "Authorization: Bearer ${{ secrets.PUSHLY_TOKEN }}"
           echo "✅ Deployment triggered to PRODUCTION!"
+
       - name: Send Slack Notification
         if: always()
         run: |
@@ -101,7 +102,7 @@ jobs:
           COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
           PROJECT_ID="${{ secrets.PROJECT_ID }}"
           DEPLOYMENT_ID="${{ env.deployment_id }}"
-          
+
           if [ "$DEPLOYMENT_STATUS" = "success" ]; then
             STATUS_EMOJI="✅"
             STATUS_TEXT="Success"
@@ -110,183 +111,65 @@ jobs:
             STATUS_EMOJI="❌"
             STATUS_TEXT="Failed"
           fi
-          
-          # Escape commit message for JSON
-          COMMIT_MSG_ESC=$(echo "$COMMIT_MSG" | sed 's/"/\"/g' | sed 's/\\/\\\\/g')
-          
-          # Build JSON payload using jq for proper escaping
-          if [ "$DEPLOYMENT_STATUS" = "success" ]; then
-            PAYLOAD=$(jq -n \
-              --arg status_emoji "$STATUS_EMOJI" \
-              --arg status_text "$STATUS_TEXT" \
-              --arg project_id "$PROJECT_ID" \
-              --arg environment "PRODUCTION" \
-              --arg branch "main" \
-              --arg deployment_id "$DEPLOYMENT_ID" \
-              --arg commit_hash "${{ github.sha }}" \
-              --arg commit_msg "$COMMIT_MSG_ESC" \
-              --arg commit_short "$COMMIT_SHORT" \
-              --arg repository "${{ github.repository }}" \
-              --arg ref "${{ github.ref }}" \
-              --arg deployment_url "$DEPLOYMENT_URL" \
-              '{
-                blocks: [
-                  {
-                    type: "header",
-                    text: {
-                      type: "plain_text",
-                      text: ($status_emoji + " Deployment " + $status_text),
-                      emoji: true
-                    }
-                  },
-                  {
-                    type: "section",
-                    fields: [
-                      {
-                        type: "mrkdwn",
-                        text: ("*Project:*
-" + $project_id)
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Environment:*
-" + $environment)
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Branch:*
-" + $branch)
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Status:*
-" + $status_text)
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Deployment ID:*
-" + $deployment_id)
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Commit Hash:*\n`" + $commit_hash + "`")
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Commit Message:*
-" + $commit_msg)
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Repository:*
-" + $repository)
-                      }
-                    ]
-                  },
-                  {
-                    type: "section",
-                    text: {
+
+          COMMIT_MSG_ESC=$(echo "$COMMIT_MSG" | sed 's/"/\\"/g' | sed 's/\\/\\\\/g')
+
+          PAYLOAD=$(jq -n \
+            --arg status_emoji "$STATUS_EMOJI" \
+            --arg status_text "$STATUS_TEXT" \
+            --arg project_id "$PROJECT_ID" \
+            --arg environment "PRODUCTION" \
+            --arg branch "main" \
+            --arg deployment_id "$DEPLOYMENT_ID" \
+            --arg commit_hash "${{ github.sha }}" \
+            --arg commit_msg "$COMMIT_MSG_ESC" \
+            --arg commit_short "$COMMIT_SHORT" \
+            --arg repository "${{ github.repository }}" \
+            --arg ref "${{ github.ref }}" \
+            --arg deployment_url "$DEPLOYMENT_URL" \
+            '{
+              blocks: [
+                {
+                  type: "header",
+                  text: {
+                    type: "plain_text",
+                    text: ($status_emoji + " Deployment " + $status_text),
+                    emoji: true
+                  }
+                },
+                {
+                  type: "section",
+                  fields: [
+                    { type: "mrkdwn", text: ("*Project:*\\n" + $project_id) },
+                    { type: "mrkdwn", text: ("*Environment:*\\n" + $environment) },
+                    { type: "mrkdwn", text: ("*Branch:*\\n" + $branch) },
+                    { type: "mrkdwn", text: ("*Status:*\\n" + $status_text) },
+                    { type: "mrkdwn", text: ("*Deployment ID:*\\n" + $deployment_id) },
+                    { type: "mrkdwn", text: ("*Commit Hash:*\\n`" + $commit_hash + "`") },
+                    { type: "mrkdwn", text: ("*Commit Message:*\\n" + $commit_msg) },
+                    { type: "mrkdwn", text: ("*Repository:*\\n" + $repository) }
+                  ]
+                },
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: ("*Deployment URL:* <" + $deployment_url + "|" + $deployment_url + ">")
+                  }
+                },
+                { type: "divider" },
+                {
+                  type: "context",
+                  elements: [
+                    {
                       type: "mrkdwn",
-                      text: ("*Deployment URL:* <" + $deployment_url + "|" + $deployment_url + ">")
+                      text: ("Build triggered on " + $ref + " | Commit: `" + $commit_short + "`")
                     }
-                  },
-                  {
-                    type: "divider"
-                  },
-                  {
-                    type: "context",
-                    elements: [
-                      {
-                        type: "mrkdwn",
-                        text: ("Build triggered on " + $ref + " | Commit: `" + $commit_short + "`")
-                      }
-                    ]
-                  }
-                ]
-              }')
-          else
-            PAYLOAD=$(jq -n \
-              --arg status_emoji "$STATUS_EMOJI" \
-              --arg status_text "$STATUS_TEXT" \
-              --arg project_id "$PROJECT_ID" \
-              --arg environment "PRODUCTION" \
-              --arg branch "main" \
-              --arg deployment_id "$DEPLOYMENT_ID" \
-              --arg commit_hash "${{ github.sha }}" \
-              --arg commit_msg "$COMMIT_MSG_ESC" \
-              --arg commit_short "$COMMIT_SHORT" \
-              --arg repository "${{ github.repository }}" \
-              --arg ref "${{ github.ref }}" \
-              '{
-                blocks: [
-                  {
-                    type: "header",
-                    text: {
-                      type: "plain_text",
-                      text: ($status_emoji + " Deployment " + $status_text),
-                      emoji: true
-                    }
-                  },
-                  {
-                    type: "section",
-                    fields: [
-                      {
-                        type: "mrkdwn",
-                        text: ("*Project:*
-" + $project_id)
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Environment:*
-" + $environment)
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Branch:*
-" + $branch)
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Status:*
-" + $status_text)
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Deployment ID:*
-" + $deployment_id)
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Commit Hash:*\n`" + $commit_hash + "`")
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Commit Message:*
-" + $commit_msg)
-                      },
-                      {
-                        type: "mrkdwn",
-                        text: ("*Repository:*
-" + $repository)
-                      }
-                    ]
-                  },
-                  {
-                    type: "divider"
-                  },
-                  {
-                    type: "context",
-                    elements: [
-                      {
-                        type: "mrkdwn",
-                        text: ("Build triggered on " + $ref + " | Commit: `" + $commit_short + "`")
-                      }
-                    ]
-                  }
-                ]
-              }')
-          fi
-          
+                  ]
+                }
+              ]
+            }')
+
           curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD"
