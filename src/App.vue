@@ -3,7 +3,7 @@
     <header class="app-header">
       <img alt="Vue logo" src="./assets/logo.png" class="logo" />
       <h1>FocusFlow</h1>
-      <p class="subtitle">Tasks • Pomodoro • Notes — all in your browser for you</p>
+      <p class="subtitle">Tasks • Pomodoro • Notes</p>
     </header>
 
     <nav class="tabs">
