@@ -1,0 +1,49 @@
+name: Pushly Auto Deploy (Production)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Trigger Deployment Creation
+        id: create_deployment
+        run: |
+          echo "🚀 Creating deployment record on Pushly..."
+          RESPONSE=$(curl -s -X POST "https://api.wareality.tech/api/projects/${{ secrets.PROJECT_ID }}/deployments" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.PUSHLY_TOKEN }}" \
+            -d "{
+              \"gitCommitHash\": \"${{ github.sha }}\",
+              \"gitBranch\": \"main\",
+              \"environment\": \"PRODUCTION\"
+            }")
+          
+          echo "Response: $RESPONSE"
+          DEPLOYMENT_ID=$(echo $RESPONSE | jq -r '.id')
+          
+          if [ "$DEPLOYMENT_ID" = "null" ] || [ -z "$DEPLOYMENT_ID" ]; then
+            echo "❌ Failed to create deployment"
+            exit 1
+          fi
+
+          echo "✅ Deployment created with ID: $DEPLOYMENT_ID"
+          echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_ENV
+
+      - name: Trigger Actual Deployment
+        run: |
+          echo "🚀 Starting deployment to PRODUCTION environment..."
+          curl -s -X POST "https://api.wareality.tech/api/projects/${{ secrets.PROJECT_ID }}/deployments/${{ env.deployment_id }}/deploy?environment=PRODUCTION" \
+            -H "Authorization: Bearer ${{ secrets.PUSHLY_TOKEN }}"
+
+          echo "✅ Deployment triggered to PRODUCTION!"
+
+      - name: Done
+        run: echo "🎉 Pushly Deployment to PRODUCTION initiated successfully!"
