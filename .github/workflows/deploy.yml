@@ -126,7 +126,6 @@
 
 #       - name: Done
 #         run: echo "🎉 Pushly Deployment to PRODUCTION initiated successfully!"
-
 name: Pushly Auto Deploy (PRODUCTION)
 
 on:
@@ -184,13 +183,14 @@ jobs:
           if [ "$DEPLOYMENT_STATUS" = "success" ]; then
             STATUS_EMOJI="✅"
             STATUS_TEXT="Success"
-            DEPLOYMENT_URL="https://focus-flow.wareality.tech"
+            DEPLOYMENT_URL="https://YOUR_PROJECT_ID.wareality.tech"
           else
             STATUS_EMOJI="❌"
             STATUS_TEXT="Failed"
-            DEPLOYMENT_URL="https://focus-flow.wareality.tech"
+            DEPLOYMENT_URL="https://YOUR_PROJECT_ID.wareality.tech"
           fi
           
+          # Escape quotes and backslashes safely for JSON
           COMMIT_MSG_ESC=$(echo "$COMMIT_MSG" | sed 's/"/\"/g' | sed 's/\/\\/g')
           
           PAYLOAD=$(jq -n \
@@ -249,7 +249,7 @@ jobs:
               ]
             }')
           
-          curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
+          curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD"
 
