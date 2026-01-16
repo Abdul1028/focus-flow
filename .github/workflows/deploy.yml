@@ -1,199 +1,72 @@
-# name: Pushly Auto Deploy (PRODUCTION)
-
-# on:
-#   push:
-#     branches:
-#       - main
-
-# jobs:
-#   deploy-production:
-#     runs-on: ubuntu-latest
-#     steps:
-#       - name: Checkout repo
-#         uses: actions/checkout@v4
-#         with:
-#           fetch-depth: 0
-
-#       - name: Trigger Deployment Creation
-#         id: create_deployment
-#         run: |
-#           echo "🚀 Creating deployment record on Pushly..."
-#           RESPONSE=$(curl -s -X POST "https://api.wareality.tech/api/projects/${{ secrets.PROJECT_ID }}/deployments" \
-#             -H "Content-Type: application/json" \
-#             -H "Authorization: Bearer ${{ secrets.PUSHLY_TOKEN }}" \
-#             -d "{
-#               \"gitCommitHash\": \"${{ github.sha }}\",
-#               \"gitBranch\": \"main\",
-#               \"environment\": \"PRODUCTION\"
-#             }")
-
-#           echo "Response: $RESPONSE"
-#           DEPLOYMENT_ID=$(echo "$RESPONSE" | jq -r '.id')
-
-#           if [ "$DEPLOYMENT_ID" = "null" ] || [ -z "$DEPLOYMENT_ID" ]; then
-#             echo "❌ Failed to create deployment"
-#             exit 1
-#           fi
-#           echo "✅ Deployment created with ID: $DEPLOYMENT_ID"
-#           echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_ENV
-
-#       - name: Trigger Actual Deployment
-#         run: |
-#           echo "🚀 Starting deployment to PRODUCTION environment..."
-#           curl -s -X POST "https://api.wareality.tech/api/projects/${{ secrets.PROJECT_ID }}/deployments/${{ env.deployment_id }}/deploy?environment=PRODUCTION" \
-#             -H "Authorization: Bearer ${{ secrets.PUSHLY_TOKEN }}"
-#           echo "✅ Deployment triggered to PRODUCTION!"
-
-#       - name: Send Slack Notification
-#         if: always()
-#         run: |
-#           DEPLOYMENT_STATUS="${{ job.status }}"
-#           COMMIT_MSG=$(git log -1 --pretty=%B | head -c 200)
-#           COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
-#           PROJECT_ID="${{ secrets.PROJECT_ID }}"
-#           DEPLOYMENT_ID="${{ env.deployment_id }}"
-
-#           if [ "$DEPLOYMENT_STATUS" = "success" ]; then
-#             STATUS_EMOJI="✅"
-#             STATUS_TEXT="Success"
-#             DEPLOYMENT_URL="https://focus-flow.wareality.tech"
-#           else
-#             STATUS_EMOJI="❌"
-#             STATUS_TEXT="Failed"
-#           fi
-
-#           COMMIT_MSG_ESC=$(echo "$COMMIT_MSG" | sed 's/"/\\"/g' | sed 's/\\/\\\\/g')
-
-#           PAYLOAD=$(jq -n \
-#             --arg status_emoji "$STATUS_EMOJI" \
-#             --arg status_text "$STATUS_TEXT" \
-#             --arg project_id "$PROJECT_ID" \
-#             --arg environment "PRODUCTION" \
-#             --arg branch "main" \
-#             --arg deployment_id "$DEPLOYMENT_ID" \
-#             --arg commit_hash "${{ github.sha }}" \
-#             --arg commit_msg "$COMMIT_MSG_ESC" \
-#             --arg commit_short "$COMMIT_SHORT" \
-#             --arg repository "${{ github.repository }}" \
-#             --arg ref "${{ github.ref }}" \
-#             --arg deployment_url "$DEPLOYMENT_URL" \
-#             '{
-#               blocks: [
-#                 {
-#                   type: "header",
-#                   text: {
-#                     type: "plain_text",
-#                     text: ($status_emoji + " Deployment " + $status_text),
-#                     emoji: true
-#                   }
-#                 },
-#                 {
-#                   type: "section",
-#                   fields: [
-#                     { type: "mrkdwn", text: ("*Project:*\\n" + $project_id) },
-#                     { type: "mrkdwn", text: ("*Environment:*\\n" + $environment) },
-#                     { type: "mrkdwn", text: ("*Branch:*\\n" + $branch) },
-#                     { type: "mrkdwn", text: ("*Status:*\\n" + $status_text) },
-#                     { type: "mrkdwn", text: ("*Deployment ID:*\\n" + $deployment_id) },
-#                     { type: "mrkdwn", text: ("*Commit Hash:*\\n`" + $commit_hash + "`") },
-#                     { type: "mrkdwn", text: ("*Commit Message:*\\n" + $commit_msg) },
-#                     { type: "mrkdwn", text: ("*Repository:*\\n" + $repository) }
-#                   ]
-#                 },
-#                 {
-#                   type: "section",
-#                   text: {
-#                     type: "mrkdwn",
-#                     text: ("*Deployment URL:* <" + $deployment_url + "|" + $deployment_url + ">")
-#                   }
-#                 },
-#                 { type: "divider" },
-#                 {
-#                   type: "context",
-#                   elements: [
-#                     {
-#                       type: "mrkdwn",
-#                       text: ("Build triggered on " + $ref + " | Commit: `" + $commit_short + "`")
-#                     }
-#                   ]
-#                 }
-#               ]
-#             }')
-
-#           curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
-#             -H "Content-Type: application/json" \
-#             -d "$PAYLOAD"
-
-#       - name: Done
-#         run: echo "🎉 Pushly Deployment to PRODUCTION initiated successfully!"
-name: Pushly Auto Deploy (PRODUCTION)
+name: Pushly Auto Deploy
 
 on:
   push:
     branches:
-      - main
+      - "**"
 
 jobs:
-  deploy-production:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Trigger Deployment Creation
-        id: create_deployment
+      - name: Determine Environment
         run: |
-          echo "🚀 Creating deployment record on Pushly..."
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "ENVIRONMENT=PRODUCTION" >> $GITHUB_ENV
+          else
+            echo "ENVIRONMENT=STAGING" >> $GITHUB_ENV
+          fi
+
+      - name: Create Deployment
+        run: |
           RESPONSE=$(curl -s -X POST "https://api.wareality.tech/api/projects/${{ secrets.PROJECT_ID }}/deployments" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.PUSHLY_TOKEN }}" \
             -d "{
               \"gitCommitHash\": \"${{ github.sha }}\",
-              \"gitBranch\": \"main\",
-              \"environment\": \"PRODUCTION\"
+              \"gitBranch\": \"${{ github.ref_name }}\",
+              \"environment\": \"$ENVIRONMENT\"
             }")
-          
-          echo "Response: $RESPONSE"
+
           DEPLOYMENT_ID=$(echo $RESPONSE | jq -r '.id')
-          
-          if [ "$DEPLOYMENT_ID" = "null" ] || [ -z "$DEPLOYMENT_ID" ]; then
+
+          if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
             echo "❌ Failed to create deployment"
             exit 1
           fi
-          echo "✅ Deployment created with ID: $DEPLOYMENT_ID"
+
           echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_ENV
 
-      - name: Trigger Actual Deployment
+      - name: Trigger Deployment
         run: |
-          echo "🚀 Starting deployment to PRODUCTION environment..."
-          curl -s -X POST "https://api.wareality.tech/api/projects/${{ secrets.PROJECT_ID }}/deployments/${{ env.deployment_id }}/deploy?environment=PRODUCTION" \
+          curl -s -X POST "https://api.wareality.tech/api/projects/${{ secrets.PROJECT_ID }}/deployments/${{ env.deployment_id }}/deploy?environment=$ENVIRONMENT" \
             -H "Authorization: Bearer ${{ secrets.PUSHLY_TOKEN }}"
-          echo "✅ Deployment triggered to PRODUCTION!"
+
       - name: Send Slack Notification
         if: always()
         run: |
-          DEPLOYMENT_STATUS="${{ job.status }}"
-          COMMIT_MSG=$(git log -1 --pretty=%B | head -c 200)
           COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
-          PROJECT_ID="${{ secrets.PROJECT_ID }}"
-          DEPLOYMENT_ID="${{ env.deployment_id }}"
-          
-          if [ "$DEPLOYMENT_STATUS" = "success" ]; then
-            DEPLOYMENT_URL="https://flow-app-541.wareality.tech"
-            MESSAGE="Deployment to PRODUCTION environment for project $PROJECT_ID on branch main has completed successfully. Deployment ID: $DEPLOYMENT_ID. Commit: $COMMIT_SHORT. Access at: $DEPLOYMENT_URL"
+
+          if [ "$ENVIRONMENT" = "PRODUCTION" ]; then
+            DEPLOYMENT_URL="https://focus.wareality.tech"
           else
-            DEPLOYMENT_URL="https://flow-app-541.wareality.tech"
-            MESSAGE="Deployment to PRODUCTION environment for project $PROJECT_ID on branch main has failed. Deployment ID: $DEPLOYMENT_ID. Commit: $COMMIT_SHORT"
+            DEPLOYMENT_URL="https://${{ env.deployment_id }}--focus.wareality.tech"
           fi
-          
-          # Escape message for JSON
+
+          if [ "${{ job.status }}" = "success" ]; then
+            MESSAGE="✅ Deployment successful for focus ($ENVIRONMENT) | Commit: $COMMIT_SHORT | URL: $DEPLOYMENT_URL"
+          else
+            MESSAGE="❌ Deployment failed for focus ($ENVIRONMENT) | Commit: $COMMIT_SHORT"
+          fi
+
           MESSAGE_ESC=$(echo "$MESSAGE" | sed 's/"/\"/g')
-          
+
           curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
             -d "{\"text\": \"$MESSAGE_ESC\"}"
 
       - name: Done
-        run: echo "🎉 Pushly Deployment to PRODUCTION initiated successfully!"
+        run: echo "🎉 Deployment triggered successfully"
