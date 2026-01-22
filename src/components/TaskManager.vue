@@ -14,7 +14,7 @@
 
     <form class="task-form" @submit.prevent="addTask">
       <input v-model="newTitle" placeholder="What needs to be done?" />
-      <button type="submit">Add</button>
+      <button type="submit">Add TasSK</button>
     </form>
 
     <ul class="task-list">
